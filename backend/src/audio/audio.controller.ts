@@ -4,6 +4,12 @@ import { ApiTags, ApiOperation, ApiConsumes, ApiBody, ApiBearerAuth } from '@nes
 import { AuthGuard } from '@nestjs/passport';
 import { AudioService } from './audio.service';
 
+type UploadedAudioFile = {
+  originalname: string;
+  mimetype: string;
+  buffer: Buffer;
+};
+
 @ApiTags('Audio')
 @ApiBearerAuth()
 @UseGuards(AuthGuard('jwt')) // Защищаем роут JWT токеном
@@ -36,7 +42,7 @@ export class AudioController {
         ],
       }),
     )
-    file: Express.Multer.File,
+    file: UploadedAudioFile,
   ) {
     // req.user добавляется гвардом AuthGuard('jwt')
     return this.audioService.uploadAudioFile(req.user.sub, file);

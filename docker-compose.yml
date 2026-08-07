@@ -1,13 +1,9 @@
-version: '3.8'
-
 services:
-  # PostgreSQL для основной бизнес-логики и пользователей
   postgres:
     image: postgres:15-alpine
-    container_name: piano_postgres
     environment:
-      POSTGRES_USER: root
-      POSTGRES_PASSWORD: rootpassword
+      POSTGRES_USER: piano
+      POSTGRES_PASSWORD: piano_dev_password
       POSTGRES_DB: piano_transcription
     ports:
       - "5432:5432"
@@ -16,15 +12,13 @@ services:
     networks:
       - piano_network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U root -d piano_transcription"]
+      test: ["CMD-SHELL", "pg_isready -U piano -d piano_transcription"]
       interval: 10s
       timeout: 5s
       retries: 5
 
-  # Redis для кэширования и управления WebSockets сессиями
   redis:
     image: redis:7-alpine
-    container_name: piano_redis
     ports:
       - "6379:6379"
     volumes:
@@ -37,10 +31,8 @@ services:
       timeout: 5s
       retries: 5
 
-  # MongoDB для хранения результатов глубокого музыкального анализа
   mongodb:
     image: mongo:6
-    container_name: piano_mongodb
     environment:
       MONGO_INITDB_ROOT_USERNAME: admin
       MONGO_INITDB_ROOT_PASSWORD: adminpassword
@@ -56,16 +48,14 @@ services:
       timeout: 5s
       retries: 5
 
-  # RabbitMQ для асинхронной обработки аудио и ML-задач
   rabbitmq:
     image: rabbitmq:3-management-alpine
-    container_name: piano_rabbitmq
     environment:
-      RABBITMQ_DEFAULT_USER: guest
-      RABBITMQ_DEFAULT_PASS: guest
+      RABBITMQ_DEFAULT_USER: piano
+      RABBITMQ_DEFAULT_PASS: piano_dev_password
     ports:
-      - "5672:5672"   # Порт для AMQP
-      - "15672:15672" # Порт для Management UI
+      - "5672:5672"
+      - "15672:15672"
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
     networks:
@@ -75,6 +65,63 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+
+  backend:
+    build:
+      context: ./backend
+    environment:
+      NODE_ENV: development
+      PORT: 8000
+      CLIENT_URL: http://localhost:3000
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: piano
+      DB_PASSWORD: piano_dev_password
+      DB_NAME: piano_transcription
+      RABBITMQ_URL: amqp://piano:piano_dev_password@rabbitmq:5672
+      JWT_SECRET: local-development-secret-change-me
+      AWS_REGION: us-east-1
+      AWS_S3_BUCKET_NAME: piano-transcription
+      AWS_ACCESS_KEY_ID: local
+      AWS_SECRET_ACCESS_KEY: local
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - piano_network
+
+  worker:
+    build:
+      context: ./worker
+    environment:
+      RABBITMQ_URL: amqp://piano:piano_dev_password@rabbitmq:5672
+      QUEUE_NAME: audio_processing_queue
+      BACKEND_INTERNAL_URL: http://backend:8000/api/v1
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      backend:
+        condition: service_started
+    networks:
+      - piano_network
+
+  frontend:
+    build:
+      context: ./frontend
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:8000/api/v1
+      NEXT_PUBLIC_SOCKET_URL: http://localhost:8000/transcription
+    ports:
+      - "3000:3000"
+    depends_on:
+      backend:
+        condition: service_started
+    networks:
+      - piano_network
 
 volumes:
   postgres_data:

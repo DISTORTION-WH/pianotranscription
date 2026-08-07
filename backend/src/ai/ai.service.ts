@@ -30,7 +30,12 @@ export class AiService {
         temperature: 0.2,
       });
 
-      const analysisResult = JSON.parse(response.choices[0].message.content);
+      const content = response.choices[0]?.message.content;
+      if (!content) {
+        throw new Error('OpenAI returned an empty analysis response');
+      }
+
+      const analysisResult = JSON.parse(content);
       this.logger.log('Successfully analyzed musical structure via OpenAI');
       
       return analysisResult;

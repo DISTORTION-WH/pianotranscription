@@ -7,6 +7,12 @@ import { ClientProxy } from '@nestjs/microservices';
 import { AudioTrack, TranscriptionStatus } from './entities/audio-track.entity';
 import { v4 as uuidv4 } from 'uuid';
 
+type UploadedAudioFile = {
+  originalname: string;
+  mimetype: string;
+  buffer: Buffer;
+};
+
 @Injectable()
 export class AudioService {
   private readonly s3Client: S3Client;
@@ -29,7 +35,7 @@ export class AudioService {
     });
   }
 
-  async uploadAudioFile(userId: string, file: Express.Multer.File): Promise<AudioTrack> {
+  async uploadAudioFile(userId: string, file: UploadedAudioFile): Promise<AudioTrack> {
     const fileExtension = file.originalname.split('.').pop();
     const uniqueFilename = `${userId}/${uuidv4()}.${fileExtension}`;
 
