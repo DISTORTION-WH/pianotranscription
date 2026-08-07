@@ -4,12 +4,12 @@ import { useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import api from '@/lib/api';
 import { useTranscriptionSocket } from '@/hooks/useTranscriptionSocket';
+import SheetMusicViewer from '@/components/SheetMusicViewer'; // <-- Импорт вьювера
 
 export default function DashboardPage() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const { lastUpdate } = useTranscriptionSocket();
 
-  // Настраиваем мутацию React Query для загрузки аудио
   const uploadMutation = useMutation({
     mutationFn: async (file: File) => {
       const formData = new FormData();
@@ -34,7 +34,7 @@ export default function DashboardPage() {
   };
 
   return (
-    <div className="max-w-4xl mx-auto py-12 px-4 sm:px-6 lg:px-8 w-full">
+    <div className="max-w-5xl mx-auto py-12 px-4 sm:px-6 lg:px-8 w-full">
       <h1 className="text-3xl font-bold tracking-tight text-gray-900 mb-8">Transcription Dashboard</h1>
       
       <div className="bg-white shadow rounded-lg p-6 mb-8 border border-gray-200">
@@ -54,27 +54,36 @@ export default function DashboardPage() {
             {uploadMutation.isPending ? 'Uploading...' : 'Upload & Transcribe'}
           </button>
         </div>
-        {uploadMutation.isError && (
-          <p className="mt-4 text-sm text-red-600">Error uploading file. Please try again.</p>
-        )}
       </div>
 
       <div className="bg-white shadow rounded-lg p-6 border border-gray-200">
         <h2 className="text-xl font-semibold mb-4">Real-time Status Updates</h2>
         {lastUpdate ? (
-          <div className="p-4 bg-gray-50 rounded-md border border-gray-100">
-            <p><strong>Track ID:</strong> {lastUpdate.trackId}</p>
-            <p>
-              <strong>Status:</strong> 
-              <span className={`ml-2 px-2 inline-flex text-xs leading-5 font-semibold rounded-full 
-                ${lastUpdate.status === 'COMPLETED' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>
-                {lastUpdate.status}
-              </span>
-            </p>
-            {lastUpdate.midiUrl && (
-              <p className="mt-2 text-blue-600 hover:underline">
-                <a href={lastUpdate.midiUrl} target="_blank" rel="noreferrer">Download MIDI</a>
-              </p>
+          <div className="space-y-6">
+            <div className="p-4 bg-gray-50 rounded-md border border-gray-100 flex justify-between items-center">
+              <div>
+                <p><strong>Track ID:</strong> {lastUpdate.trackId}</p>
+                <p className="mt-1">
+                  <strong>Status:</strong> 
+                  <span className={`ml-2 px-2 inline-flex text-xs leading-5 font-semibold rounded-full 
+                    ${lastUpdate.status === 'COMPLETED' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>
+                    {lastUpdate.status}
+                  </span>
+                </p>
+              </div>
+              {lastUpdate.midiUrl && (
+                <a href={lastUpdate.midiUrl} target="_blank" rel="noreferrer" className="text-sm font-medium text-blue-600 hover:text-blue-500">
+                  Download MIDI ↓
+                </a>
+              )}
+            </div>
+
+            {/* Рендерим ноты только если статус COMPLETED и есть ссылка на XML */}
+            {lastUpdate.status === 'COMPLETED' && lastUpdate.musicXmlUrl && (
+              <div className="mt-8 border-t pt-8">
+                <h3 className="text-lg font-medium text-gray-900 mb-4">Generated Sheet Music</h3>
+                <SheetMusicViewer fileUrl={lastUpdate.musicXmlUrl} />
+              </div>
             )}
           </div>
         ) : (
