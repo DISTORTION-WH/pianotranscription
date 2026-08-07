@@ -1,7 +1,9 @@
 version: '3.8'
 
 services:
-  # PostgreSQL для основного бизнес-логики и пользователей (TypeORM)
+  # ==========================================
+  # ИНФРАСТРУКТУРА (Базы данных и очереди)
+  # ==========================================
   postgres:
     image: postgres:15-alpine
     container_name: piano_postgres
@@ -21,7 +23,6 @@ services:
       timeout: 5s
       retries: 5
 
-  # Redis для кэширования и управления WebSockets сессиями
   redis:
     image: redis:7-alpine
     container_name: piano_redis
@@ -31,32 +32,7 @@ services:
       - redis_data:/data
     networks:
       - piano_network
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
 
-  # MongoDB для хранения глубокого музыкального анализа (неструктурированные данные)
-  mongodb:
-    image: mongo:6
-    container_name: piano_mongodb
-    environment:
-      MONGO_INITDB_ROOT_USERNAME: admin
-      MONGO_INITDB_ROOT_PASSWORD: adminpassword
-    ports:
-      - "27017:27017"
-    volumes:
-      - mongodb_data:/data/db
-    networks:
-      - piano_network
-    healthcheck:
-      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  # RabbitMQ для асинхронной обработки аудио и ML-задач
   rabbitmq:
     image: rabbitmq:3-management-alpine
     container_name: piano_rabbitmq
@@ -64,22 +40,70 @@ services:
       RABBITMQ_DEFAULT_USER: guest
       RABBITMQ_DEFAULT_PASS: guest
     ports:
-      - "5672:5672"   # Порт для AMQP
-      - "15672:15672" # Порт для Management UI
+      - "5672:5672"
+      - "15672:15672"
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
     networks:
       - piano_network
-    healthcheck:
-      test: ["CMD", "rabbitmq-diagnostics", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+
+  # ==========================================
+  # МИКРОСЕРВИСЫ ПЛАТФОРМЫ
+  # ==========================================
+  backend:
+    build: 
+      context: ./backend
+      dockerfile: Dockerfile # Убедись, что добавишь Dockerfile в папку backend
+    container_name: piano_backend
+    ports:
+      - "8000:8000"
+    environment:
+      - PORT=8000
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_USER=root
+      - DB_PASSWORD=rootpassword
+      - DB_NAME=piano_transcription
+      - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672
+      - CLIENT_URL=http://localhost:3000
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_started
+    networks:
+      - piano_network
+
+  worker:
+    build: 
+      context: ./worker
+    container_name: piano_ml_worker
+    environment:
+      - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672/
+    depends_on:
+      rabbitmq:
+        condition: service_started
+    networks:
+      - piano_network
+
+  frontend:
+    build: 
+      context: ./frontend
+      dockerfile: Dockerfile # Убедись, что добавишь Dockerfile в папку frontend
+    container_name: piano_frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8000/api/v1
+      - NEXT_PUBLIC_SOCKET_URL=http://localhost:8000/transcription
+    depends_on:
+      - backend
+    networks:
+      - piano_network
 
 volumes:
   postgres_data:
   redis_data:
-  mongodb_data:
   rabbitmq_data:
 
 networks:
