@@ -1,0 +1,87 @@
+version: '3.8'
+
+services:
+  # PostgreSQL для основного бизнес-логики и пользователей (TypeORM)
+  postgres:
+    image: postgres:15-alpine
+    container_name: piano_postgres
+    environment:
+      POSTGRES_USER: root
+      POSTGRES_PASSWORD: rootpassword
+      POSTGRES_DB: piano_transcription
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - piano_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U root -d piano_transcription"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis для кэширования и управления WebSockets сессиями
+  redis:
+    image: redis:7-alpine
+    container_name: piano_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - piano_network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # MongoDB для хранения глубокого музыкального анализа (неструктурированные данные)
+  mongodb:
+    image: mongo:6
+    container_name: piano_mongodb
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: adminpassword
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+    networks:
+      - piano_network
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # RabbitMQ для асинхронной обработки аудио и ML-задач
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: piano_rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    ports:
+      - "5672:5672"   # Порт для AMQP
+      - "15672:15672" # Порт для Management UI
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    networks:
+      - piano_network
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:
+  redis_data:
+  mongodb_data:
+  rabbitmq_data:
+
+networks:
+  piano_network:
+    driver: bridge
